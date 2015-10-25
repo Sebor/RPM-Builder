@@ -58,4 +58,4 @@ else:
 		for file in os.listdir(SRCPATH):
 			MD5 = hashlib.md5(file).hexdigest()
 			DATETIME = datetime.datetime.now()
-			cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?);", (file, State, MD5, DATETIME))
+			cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (file, State, MD5, DATETIME, Depends))
