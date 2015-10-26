@@ -26,6 +26,7 @@ def create_db(source_dir):
 			cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (file, State, md5, Datetime, Depends))
         return sys.exit()
 
+
 def check_func(source_dir):
     if os.path.isfile("packages.db"):
         con = lite.connect('packages.db')
@@ -63,13 +64,13 @@ def build_func(source_dir, dest_dir):
                 with con:
                     cur = con.cursor()
                     cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (newpkg, State, md5, Datetime, Depends))
+                    cur.execute("DROP TABLE NEW_PACKAGES")
             else:
                 State = 'Not Built'
                 with con:
                     cur = con.cursor()
                     cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (newpkg, State, md5, Datetime, Depends))
-
-
+                    cur.execute("DROP TABLE NEW_PACKAGES")
 
 
 def force_rebuild_func(source_dir, dest_dir):
@@ -84,8 +85,8 @@ def force_rebuild_func(source_dir, dest_dir):
 
 
 def check_deps_func(source_dir):
-	con = lite.connect('packages.db')
-	for srcrpm in os.listdir(source_dir):
+    con = lite.connect('packages.db')
+    for srcrpm in os.listdir(source_dir):
 		args = ['sudo', 'yum-builddep', '-y', source_dir + os.path.sep + srcrpm]
 		ExitCode = subprocess.call(args)
 		if ExitCode == 0:
