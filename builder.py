@@ -36,7 +36,41 @@ def check_func(source_dir):
 
 
 def build_func(source_dir, dest_dir):
-	pass
+    if not os.path.isfile("packages.db"):
+        force_rebuild_func(source_dir, dest_dir)
+    else:
+        con = lite.connect('packages.db')
+        with con:
+            State = ''
+            md5 = ''
+            Datetime = ''
+            Depends = ''
+            cur = con.cursor()
+            cur.execute("CREATE TABLE NEW_PACKAGES(Name TEXT, State INT, MD5 TEXT, DATETIME TEXT, Depends TEXT)")
+            for file in os.listdir(source_dir):
+                md5 = hashlib.md5(file).hexdigest()
+                Datetime = datetime.datetime.now()
+                cur.execute("INSERT INTO NEW_PACKAGES VALUES (?,?,?,?,?);", (file, State, md5, Datetime, Depends))
+            cur.execute("SELECT DISTINCT Name FROM NEW_PACKAGES  WHERE Name Not IN (SELECT DISTINCT Name FROM PACKAGES)")
+            new_pkg = cur.fetchone()
+        for newpkg in new_pkg:
+            args = ['rpmbuild', '--define', '_topdir ', dest_dir, '--rebuild', source_dir + os.path.sep + newpkg]
+            ExitCode = subprocess.check_call(args)
+            md5 = hashlib.md5(newpkg).hexdigest()
+            Datetime = datetime.datetime.now()
+            if ExitCode == 0:
+                State = 'Built'
+                with con:
+                    cur = con.cursor()
+                    cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (newpkg, State, md5, Datetime, Depends))
+            else:
+                State = 'Not Built'
+                with con:
+                    cur = con.cursor()
+                    cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (newpkg, State, md5, Datetime, Depends))
+
+
+
 
 def force_rebuild_func(source_dir, dest_dir):
     if os.path.isfile("packages.db"):
