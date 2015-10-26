@@ -11,6 +11,21 @@ SRCPATH = args.source
 DESTPATH = args.destination
 ACTION = args.action
 
+def create_db(source_dir):
+	con = lite.connect('packages.db')
+	with con:
+		State = ''
+		MD5 = ''
+		DATETIME = ''
+		Depends = ''
+		cur = con.cursor()
+		cur.execute("CREATE TABLE PACKAGES(Name TEXT, State INT, MD5 TEXT, DATETIME TEXT, Depends TEXT)")
+		for file in os.listdir(source_dir):
+			MD5 = hashlib.md5(file).hexdigest()
+			DATETIME = datetime.datetime.now()
+			cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (file, State, MD5, DATETIME, Depends))
+        return sys.exit()
+
 def check_func(source_dir):
 	pass
 
@@ -18,12 +33,20 @@ def build_func(source_dir, dest_dir):
 	pass
 
 def force_rebuild_func(source_dir, dest_dir):
-	pass
+    if os.path.isfile("packages.db"):
+        os.remove("packages.db")
+        create_db(source_dir)
+    else:
+        create_db(source_dir)
+    for srcrpm in os.listdir(source_dir):
+        args = ['rpmbuild', '--define', '_topdir ', dest_dir, '--rebuild', source_dir + os.path.sep + srcrpm]
+        subprocess.call(args)
+
 
 def check_deps_func(source_dir):
 	con = lite.connect('packages.db')
 	for srcrpm in os.listdir(source_dir):
-		args = ['sudo', 'yum-builddep', '-y', 'source_dir + os.path.sep + srcrpm']
+		args = ['sudo', 'yum-builddep', '-y', source_dir + os.path.sep + srcrpm]
 		ExitCode = subprocess.call(args)
 		if ExitCode == 0:
 			with con:
@@ -34,28 +57,12 @@ def check_deps_func(source_dir):
 				cur = con.cursor()
 				cur.execute("UPDATE PACKAGES SET Depends = 'Not Ok' WHERE Name = '%s'" % srcrpm)
 
+
 if ACTION == "check":
-	check_func()
+	check_func(SRCPATH)
 elif ACTION == "build":
-	build_func()
+	build_func(SRCPATH, DESTPATH)
 elif ACTION == "force_rebuild":
-	force_rebuild_func()
+	force_rebuild_func(SRCPATH, DESTPATH)
 else:
 	print "RTFM!!!"
-
-if os.path.isfile("packages.db"):
-		pass
-else:
-	print "DB file does not exist. Creating DB file 'packages.db'"
-	con = lite.connect('packages.db')
-	with con:
-		State = ''
-		MD5 = ''
-		DATETIME = ''
-		Depends = ''
-		cur = con.cursor()
-		cur.execute("CREATE TABLE PACKAGES(Name TEXT, State INT, MD5 TEXT, DATETIME TEXT, Depends TEXT)")
-		for file in os.listdir(SRCPATH):
-			MD5 = hashlib.md5(file).hexdigest()
-			DATETIME = datetime.datetime.now()
-			cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (file, State, MD5, DATETIME, Depends))
