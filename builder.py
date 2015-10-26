@@ -31,7 +31,7 @@ def check_func(source_dir):
         con = lite.connect('packages.db')
         with con:
             cur = con.cursor()
-            cur.execute("SELECT Name from PACKAGES WHERE State = 'Error'")
+            cur.execute("SELECT Name from PACKAGES WHERE State = 'Not Built'")
             print cur.fetchone()
 
 
