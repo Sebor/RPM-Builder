@@ -15,19 +15,25 @@ def create_db(source_dir):
 	con = lite.connect('packages.db')
 	with con:
 		State = ''
-		MD5 = ''
-		DATETIME = ''
+		md5 = ''
+		Datetime = ''
 		Depends = ''
 		cur = con.cursor()
 		cur.execute("CREATE TABLE PACKAGES(Name TEXT, State INT, MD5 TEXT, DATETIME TEXT, Depends TEXT)")
 		for file in os.listdir(source_dir):
-			MD5 = hashlib.md5(file).hexdigest()
-			DATETIME = datetime.datetime.now()
-			cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (file, State, MD5, DATETIME, Depends))
+			md5 = hashlib.md5(file).hexdigest()
+			Datetime = datetime.datetime.now()
+			cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (file, State, md5, Datetime, Depends))
         return sys.exit()
 
 def check_func(source_dir):
-	pass
+    if os.path.isfile("packages.db"):
+        con = lite.connect('packages.db')
+        with con:
+            cur = con.cursor()
+            cur.execute("SELECT Name from PACKAGES WHERE State = 'Error'")
+            print cur.fetchone()
+
 
 def build_func(source_dir, dest_dir):
 	pass
@@ -51,11 +57,11 @@ def check_deps_func(source_dir):
 		if ExitCode == 0:
 			with con:
 				cur = con.cursor()
-				cur.execute("UPDATE PACKAGES SET Depends = 'Ok' WHERE Name = '%s'" % srcrpm)
+				cur.execute("UPDATE PACKAGES SET Depends = 'Resolved' WHERE Name = '%s'" % srcrpm)
 		else:
 			with con:
 				cur = con.cursor()
-				cur.execute("UPDATE PACKAGES SET Depends = 'Not Ok' WHERE Name = '%s'" % srcrpm)
+				cur.execute("UPDATE PACKAGES SET Depends = 'Unresolved' WHERE Name = '%s'" % srcrpm)
 
 
 if ACTION == "check":
