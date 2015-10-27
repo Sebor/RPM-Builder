@@ -14,10 +14,8 @@ ACTION = args.action
 def create_db(source_dir):
 	con = lite.connect('packages.db')
 	with con:
-		State = ''
-		md5 = ''
-		Datetime = ''
-		Depends = ''
+		State = 'unknown'
+		Depends = 'unknown'
 		cur = con.cursor()
 		cur.execute("CREATE TABLE PACKAGES(Name TEXT, State INT, MD5 TEXT, DATETIME TEXT, Depends TEXT)")
 		for file in os.listdir(source_dir):
@@ -34,6 +32,10 @@ def check_func(source_dir):
             cur = con.cursor()
             cur.execute("SELECT Name from PACKAGES WHERE State = 'Not Built'")
             print cur.fetchone()
+    else:
+        print "DB file doesn't exist. Creating DB..."
+        create_db(source_dir)
+    return sys.exit()
 
 
 def build_func(source_dir, dest_dir):
