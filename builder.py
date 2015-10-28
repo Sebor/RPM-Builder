@@ -56,7 +56,8 @@ def check_func(source_dir):
 			con.commit()
 			cur.execute("DROP TABLE NEW_PACKAGES")
 			cur.execute("SELECT Name from PACKAGES WHERE State = 'Not Built' OR State = 'unknown'")
-			print cur.fetchall()
+			for pkg in cur.fetchall():
+				print pkg
 	else:
 		print "DB file doesn't exist. We don't have information about packages. Creating DB..."
 		create_db(source_dir)
@@ -70,8 +71,6 @@ def build_func(source_dir, dest_dir):
 		con = lite.connect('packages.db')
 		with con:
 			State = ''
-			md5 = ''
-			Datetime = ''
 			Depends = ''
 			cur = con.cursor()
 			cur.execute("CREATE TABLE NEW_PACKAGES(Name TEXT, State INT, MD5 TEXT, DATETIME TEXT, Depends TEXT)")
@@ -106,9 +105,18 @@ def force_rebuild_func(source_dir, dest_dir):
 		create_db(source_dir)
 	else:
 		create_db(source_dir)
+	con = lite.connect('packages.db')
 	for srcrpm in os.listdir(source_dir):
 		args = ['rpmbuild', '--define', '_topdir ', dest_dir, '--rebuild', source_dir + os.path.sep + srcrpm]
-		subprocess.call(args)
+		ExitCode = subprocess.call(args)
+		if ExitCode == 0:
+			with con:
+				cur = con.cursor()
+				cur.execute("UPDATE PACKAGES SET State = 'Built' WHERE Name = '%s'" % srcrpm)
+		else:
+			with con:
+				cur = con.cursor()
+				cur.execute("UPDATE PACKAGES SET State = 'Not Built' WHERE Name = '%s'" % srcrpm)
 
 
 def check_deps_func(source_dir):
