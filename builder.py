@@ -1,6 +1,6 @@
 __author__ = 'Sebor'
 import sqlite3 as lite
-import argparse, sys, hashlib, os, datetime, subprocess
+import argparse, sys, hashlib, os, datetime, subprocess, multiprocessing
 
 
 parser = argparse.ArgumentParser()
@@ -11,6 +11,19 @@ args = parser.parse_args()
 SRCPATH = args.source
 DESTPATH = args.destination
 ACTION = args.action
+
+# Define rpmmacros file for multicore compiling
+cpu_count = multiprocessing.cpu_count()
+rpmmacros = os.path.expanduser('~') + os.path.sep + '.rpmmacros'
+if os.path.isfile(rpmmacros):
+	if '_make' in open(rpmmacros).read():
+		print "Multicore compile variable already defined"
+	else:
+		with open(rpmmacros, "a") as f:
+			f.write("%_make    /usr/bin/make -j " + str(cpu_count))
+			print "Set multicore compile variable"
+else:
+	print "Rpmmacros file not found!"
 
 
 def create_db(source_dir):
@@ -72,7 +85,7 @@ def check_func(source_dir):
 			cur.execute("SELECT Name from PACKAGES WHERE State = 'Not Built' OR State = 'unknown'")
 			new_pkg = cur.fetchall()
 			for pkg in new_pkg:
-				print pkg
+				print pkg[0]
 	else:
 		print "DB file doesn't exist. We don't have information about packages. Creating DB..."
 		create_db(source_dir)
