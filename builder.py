@@ -2,6 +2,7 @@ __author__ = 'Sebor'
 import sqlite3 as lite
 import argparse, sys, hashlib, os, datetime, subprocess
 
+
 parser = argparse.ArgumentParser()
 parser.add_argument("source")
 parser.add_argument("destination")
@@ -10,6 +11,7 @@ args = parser.parse_args()
 SRCPATH = args.source
 DESTPATH = args.destination
 ACTION = args.action
+
 
 def create_db(source_dir):
 	con = lite.connect('packages.db')
@@ -26,60 +28,65 @@ def create_db(source_dir):
 
 
 def check_func(source_dir):
+	# If DB file exist
 	if os.path.isfile("packages.db"):
 		con = lite.connect('packages.db')
 		with con:
 			cur = con.cursor()
+			# Create new temp table with all packages in src dir
 			cur.execute("CREATE TABLE NEW_PACKAGES(Name TEXT, MD5 TEXT)")
 			for file in os.listdir(source_dir):
 				md5 = hashlib.md5(file).hexdigest()
 				cur.execute("INSERT INTO NEW_PACKAGES VALUES (?,?);", (file, md5))
 			cur.execute("SELECT Name, MD5 FROM PACKAGES")
+			# Create dictionary from main old table
 			old_data = dict(cur.fetchall())
 			cur.execute("SELECT Name, MD5 FROM NEW_PACKAGES")
+			# Create dictionary from new temp table
 			new_data = dict(cur.fetchall())
+			# Create sets from Name and MD5 every dictionary
 			old_data_set = set(old_data.iteritems())
 			new_data_set = set(new_data.iteritems())
+			# If length of set of difference between old_data_set and new_data_set not 0
 			if len(new_data_set.difference(old_data_set)) != 0:
 				State = 'unknown'
 				Depends = 'unknown'
+				# For every pair in difference
 				for pkg in new_data_set.difference(old_data_set):
-					if pkg[0] not in old_data.keys():
-						Name = pkg[0]
-						md5 = pkg[1]
-						Datetime = datetime.datetime.now()
+					Name = pkg[0]
+					md5 = pkg[1]
+					Datetime = datetime.datetime.now()
+					# If pkg name not in main old table
+					if Name not in old_data.keys():
+						# Insert new pkg in old main table
 						cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (Name, State, md5, Datetime, Depends))
+					# Pkg name in old main table but with different MD5
 					else:
-						Name = pkg[0]
-						md5 = pkg[1]
+						# Undate info about new pkg in in old main
 						cur.execute("UPDATE PACKAGES SET MD5 = ?, State = ?, Depends = ? WHERE Name = ?", [md5, Name, State, Depends])
+			else:
+				print "There are no changes in packages. Printing general status..."
 			con.commit()
+			# Drop new temp table
 			cur.execute("DROP TABLE NEW_PACKAGES")
 			cur.execute("SELECT Name from PACKAGES WHERE State = 'Not Built' OR State = 'unknown'")
-			for pkg in cur.fetchall():
+			new_pkg = cur.fetchall()
+			for pkg in new_pkg:
 				print pkg
 	else:
 		print "DB file doesn't exist. We don't have information about packages. Creating DB..."
 		create_db(source_dir)
-	return sys.exit()
-
+	return new_pkg
 
 def build_func(source_dir, dest_dir):
+	# If DB file does not exist
 	if not os.path.isfile("packages.db"):
+		# Build all packages
 		force_rebuild_func(source_dir, dest_dir)
 	else:
+		# Set list of new packages
+		new_pkg = check_func(source_dir)
 		con = lite.connect('packages.db')
-		with con:
-			State = ''
-			Depends = ''
-			cur = con.cursor()
-			cur.execute("CREATE TABLE NEW_PACKAGES(Name TEXT, State INT, MD5 TEXT, DATETIME TEXT, Depends TEXT)")
-			for file in os.listdir(source_dir):
-				md5 = hashlib.md5(file).hexdigest()
-				Datetime = datetime.datetime.now()
-				cur.execute("INSERT INTO NEW_PACKAGES VALUES (?,?,?,?,?);", (file, State, md5, Datetime, Depends))
-			cur.execute("SELECT DISTINCT Name FROM NEW_PACKAGES  WHERE Name Not IN (SELECT DISTINCT Name FROM PACKAGES)")
-			new_pkg = cur.fetchall()
 		for newpkg in new_pkg:
 			args = ['rpmbuild', '--define', '_topdir ', dest_dir, '--rebuild', source_dir + os.path.sep + newpkg]
 			ExitCode = subprocess.check_call(args)
@@ -87,20 +94,20 @@ def build_func(source_dir, dest_dir):
 			Datetime = datetime.datetime.now()
 			if ExitCode == 0:
 				State = 'Built'
-				with con:
-					cur = con.cursor()
-					cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (newpkg, State, md5, Datetime, Depends))
-					cur.execute("DROP TABLE NEW_PACKAGES")
+				Depends = 'Resolved'
 			else:
 				State = 'Not Built'
-				with con:
-					cur = con.cursor()
-					cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (newpkg, State, md5, Datetime, Depends))
-					cur.execute("DROP TABLE NEW_PACKAGES")
+				Depends = ''
+			with con:
+				cur = con.cursor()
+				cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (newpkg, State, md5, Datetime, Depends))
+				cur.execute("DROP TABLE NEW_PACKAGES")
+	return sys.exit()
 
 
 def force_rebuild_func(source_dir, dest_dir):
 	if os.path.isfile("packages.db"):
+		# Delete and create DB
 		os.remove("packages.db")
 		create_db(source_dir)
 	else:
@@ -110,28 +117,36 @@ def force_rebuild_func(source_dir, dest_dir):
 		args = ['rpmbuild', '--define', '_topdir ', dest_dir, '--rebuild', source_dir + os.path.sep + srcrpm]
 		ExitCode = subprocess.call(args)
 		if ExitCode == 0:
-			with con:
-				cur = con.cursor()
-				cur.execute("UPDATE PACKAGES SET State = 'Built' WHERE Name = '%s'" % srcrpm)
+			State = 'Built'
+			Depends = 'Resolved'
 		else:
-			with con:
-				cur = con.cursor()
-				cur.execute("UPDATE PACKAGES SET State = 'Not Built' WHERE Name = '%s'" % srcrpm)
+			State = 'Not Built'
+			Depends = ''
+		with con:
+			cur = con.cursor()
+			cur.execute("UPDATE PACKAGES SET State = ?, Depends = ? WHERE Name = ?", [State, Depends, srcrpm])
+	return sys.exit()
 
 
 def check_deps_func(source_dir):
-	con = lite.connect('packages.db')
-	for srcrpm in os.listdir(source_dir):
-		args = ['sudo', 'yum-builddep', '-y', source_dir + os.path.sep + srcrpm]
-		ExitCode = subprocess.call(args)
-		if ExitCode == 0:
+	if os.path.isfile("packages.db"):
+		con = lite.connect('packages.db')
+		# For every src.rpm file in source directory
+		for srcrpm in os.listdir(source_dir):
+			args = ['sudo', 'yum-builddep', '-y', source_dir + os.path.sep + srcrpm]
+			# Run install dependencies and save ExitCode
+			ExitCode = subprocess.call(args)
+			if ExitCode == 0:
+				Depends = 'Resolved'
+			else:
+				Depends = 'Unresolved'
+			# Update Depends column
 			with con:
 				cur = con.cursor()
-				cur.execute("UPDATE PACKAGES SET Depends = 'Resolved' WHERE Name = '%s'" % srcrpm)
-		else:
-			with con:
-				cur = con.cursor()
-				cur.execute("UPDATE PACKAGES SET Depends = 'Unresolved' WHERE Name = '%s'" % srcrpm)
+				cur.execute("UPDATE PACKAGES SET Depends = ? WHERE Name = ?", [Depends, srcrpm])
+	else:
+		print "DB doesn't exist. You need to run 'check' first"
+	return sys.exit()
 
 
 if ACTION == "check":
@@ -141,4 +156,4 @@ elif ACTION == "build":
 elif ACTION == "force_rebuild":
 	force_rebuild_func(SRCPATH, DESTPATH)
 else:
-	print "RTFM!!!"
+	print "Type '<script_name> -h' for help"
