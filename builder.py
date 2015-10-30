@@ -41,7 +41,7 @@ def create_db(source_dir):
 
 
 def check_func(source_dir):
-	# If DB file exist
+	# If DB file exists
 	if os.path.isfile("packages.db"):
 		con = lite.connect('packages.db')
 		with con:
@@ -81,7 +81,7 @@ def check_func(source_dir):
 				print "There are no changes in packages. Printing general status..."
 			con.commit()
 			# Drop new temp table
-			cur.execute("DROP TABLE NEW_PACKAGES")
+			cur.execute("DROP TABLE IF EXISTS NEW_PACKAGES")
 			cur.execute("SELECT Name from PACKAGES WHERE State = 'Not Built' OR State = 'unknown'")
 			new_pkg = cur.fetchall()
 			for pkg in new_pkg:
@@ -101,10 +101,11 @@ def build_func(source_dir, dest_dir):
 		new_pkg = check_func(source_dir)
 		con = lite.connect('packages.db')
 		for newpkg in new_pkg:
-			args = ['rpmbuild', '--define', '_topdir ', dest_dir, '--rebuild', source_dir + os.path.sep + newpkg]
-			ExitCode = subprocess.check_call(args)
-			md5 = hashlib.md5(newpkg).hexdigest()
+			args = ["rpmbuild", "--define", "_topdir " + dest_dir, "--rebuild", source_dir + os.path.sep + newpkg[0]]
+			ExitCode = subprocess.call(args)
+			md5 = hashlib.md5(newpkg[0]).hexdigest()
 			Datetime = datetime.datetime.now()
+			Name = newpkg[0]
 			if ExitCode == 0:
 				State = 'Built'
 				Depends = 'Resolved'
@@ -113,8 +114,8 @@ def build_func(source_dir, dest_dir):
 				Depends = ''
 			with con:
 				cur = con.cursor()
-				cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (newpkg, State, md5, Datetime, Depends))
-				cur.execute("DROP TABLE NEW_PACKAGES")
+				cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (Name, State, md5, Datetime, Depends))
+				cur.execute("DROP TABLE IF EXISTS NEW_PACKAGES")
 	return sys.exit()
 
 
@@ -127,7 +128,7 @@ def force_rebuild_func(source_dir, dest_dir):
 		create_db(source_dir)
 	con = lite.connect('packages.db')
 	for srcrpm in os.listdir(source_dir):
-		args = ['rpmbuild', '--define', '_topdir ', dest_dir, '--rebuild', source_dir + os.path.sep + srcrpm]
+		args = ["rpmbuild", "--define", "_topdir " + dest_dir, "--rebuild", source_dir + os.path.sep + srcrpm]
 		ExitCode = subprocess.call(args)
 		if ExitCode == 0:
 			State = 'Built'
@@ -168,5 +169,7 @@ elif ACTION == "build":
 	build_func(SRCPATH, DESTPATH)
 elif ACTION == "force_rebuild":
 	force_rebuild_func(SRCPATH, DESTPATH)
+elif ACTION == "check_deps":
+	check_deps_func(SRCPATH)
 else:
-	print "Type '<script_name> -h' for help"
+	print "The action can be 'check', 'build', 'force_rebuild' or 'check_deps'"
