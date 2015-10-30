@@ -85,8 +85,6 @@ def check_func(source_dir):
 			cur.execute("DROP TABLE IF EXISTS NEW_PACKAGES")
 			cur.execute("SELECT Name FROM PACKAGES WHERE State = 'Not Built' OR State = 'Unknown'")
 			new_pkg = cur.fetchall()
-#			for pkg in new_pkg:
-#				print pkg[0]
 	else:
 		print "DB file doesn't exist. We don't have information about packages. Creating DB..."
 		create_db(source_dir)
@@ -168,7 +166,9 @@ def check_deps_func(source_dir):
 
 
 if ACTION == "check":
-	check_func(SRCPATH)
+	Packages = check_func(SRCPATH)
+	for package in Packages:
+		print package[0]
 elif ACTION == "build":
 	build_func(SRCPATH, DESTPATH)
 elif ACTION == "force_rebuild":
