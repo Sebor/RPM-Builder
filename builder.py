@@ -121,6 +121,7 @@ def build_func(source_dir, dest_dir):
 
 def force_rebuild_func(source_dir, dest_dir):
 	import shutil
+	#Recreate destination directory
 	shutil.rmtree(dest_dir, ignore_errors=True)
 	os.makedirs(dest_dir)
 	if os.path.isfile("packages.db"):
@@ -132,15 +133,18 @@ def force_rebuild_func(source_dir, dest_dir):
 	con = lite.connect('packages.db')
 	cur = con.cursor()
 	cur.execute("SELECT Name FROM PACKAGES")
+	# Get list of all packages
 	all_pkgs = cur.fetchall()
 	for pkg in all_pkgs:
 		Name = pkg[0]
 		dargs = ['sudo', 'yum-builddep', '-y', source_dir + os.path.sep + Name]
+		# Exit code for yum-builddep
 		ExitCodeDep = subprocess.call(dargs)
 		if ExitCodeDep == 0:
 			Depends = 'Resolved'
 			Datetime = datetime.datetime.now()
 			rargs = ["rpmbuild", "--define", "_topdir " + dest_dir, "--rebuild", source_dir + os.path.sep + Name]
+			# Exit code for rpmbuild
 			ExitCodeBuild = subprocess.call(rargs)
 			if ExitCodeBuild == 0:
 				State = 'Built'
