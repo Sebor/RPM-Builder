@@ -120,6 +120,9 @@ def build_func(source_dir, dest_dir):
 
 
 def force_rebuild_func(source_dir, dest_dir):
+	import shutil
+	shutil.rmtree(dest_dir, ignore_errors=True)
+	os.makedirs(dest_dir)
 	if os.path.isfile("packages.db"):
 		# Delete and create DB
 		os.remove("packages.db")
@@ -127,18 +130,27 @@ def force_rebuild_func(source_dir, dest_dir):
 	else:
 		create_db(source_dir)
 	con = lite.connect('packages.db')
-	for srcrpm in os.listdir(source_dir):
-		args = ["rpmbuild", "--define", "_topdir " + dest_dir, "--rebuild", source_dir + os.path.sep + srcrpm]
-		ExitCode = subprocess.call(args)
-		if ExitCode == 0:
-			State = 'Built'
+	cur = con.cursor()
+	cur.execute("SELECT Name FROM PACKAGES")
+	all_pkgs = cur.fetchall()
+	for pkg in all_pkgs:
+		Name = pkg[0]
+		dargs = ['sudo', 'yum-builddep', '-y', source_dir + os.path.sep + Name]
+		ExitCodeDep = subprocess.call(dargs)
+		if ExitCodeDep == 0:
 			Depends = 'Resolved'
+			Datetime = datetime.datetime.now()
+			rargs = ["rpmbuild", "--define", "_topdir " + dest_dir, "--rebuild", source_dir + os.path.sep + Name]
+			ExitCodeBuild = subprocess.call(rargs)
+			if ExitCodeBuild == 0:
+				State = 'Built'
+			else:
+				State = 'Not Built'
 		else:
+			Depends = 'Unresolved'
 			State = 'Not Built'
-			Depends = 'Unknown'
-		with con:
-			cur = con.cursor()
-			cur.execute("UPDATE PACKAGES SET State = ?, Depends = ? WHERE Name = ?", [State, Depends, srcrpm])
+			Datetime = datetime.datetime.now()
+		cur.execute("UPDATE PACKAGES SET State = ?, DATETIME = ?, Depends = ? WHERE Name = ?", [State, Datetime, Depends, Name])
 	return sys.exit()
 
 
