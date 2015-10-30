@@ -12,6 +12,7 @@ SRCPATH = args.source
 DESTPATH = args.destination
 ACTION = args.action
 
+
 # Define rpmmacros file for multicore compiling
 cpu_count = multiprocessing.cpu_count()
 rpmmacros = os.path.expanduser('~') + os.path.sep + '.rpmmacros'
@@ -29,8 +30,8 @@ else:
 def create_db(source_dir):
 	con = lite.connect('packages.db')
 	with con:
-		State = 'unknown'
-		Depends = 'unknown'
+		State = 'Unknown'
+		Depends = 'Unknown'
 		cur = con.cursor()
 		cur.execute("CREATE TABLE PACKAGES(Name TEXT, State INT, MD5 TEXT, DATETIME TEXT, Depends TEXT)")
 		for file in os.listdir(source_dir):
@@ -62,8 +63,8 @@ def check_func(source_dir):
 			new_data_set = set(new_data.iteritems())
 			# If length of set of difference between old_data_set and new_data_set not 0
 			if len(new_data_set.difference(old_data_set)) != 0:
-				State = 'unknown'
-				Depends = 'unknown'
+				State = 'Unknown'
+				Depends = 'Unknown'
 				# For every pair in difference
 				for pkg in new_data_set.difference(old_data_set):
 					Name = pkg[0]
@@ -82,14 +83,15 @@ def check_func(source_dir):
 			con.commit()
 			# Drop new temp table
 			cur.execute("DROP TABLE IF EXISTS NEW_PACKAGES")
-			cur.execute("SELECT Name from PACKAGES WHERE State = 'Not Built' OR State = 'unknown'")
+			cur.execute("SELECT Name FROM PACKAGES WHERE State = 'Not Built' OR State = 'Unknown'")
 			new_pkg = cur.fetchall()
-			for pkg in new_pkg:
-				print pkg[0]
+#			for pkg in new_pkg:
+#				print pkg[0]
 	else:
 		print "DB file doesn't exist. We don't have information about packages. Creating DB..."
 		create_db(source_dir)
 	return new_pkg
+
 
 def build_func(source_dir, dest_dir):
 	# If DB file does not exist
@@ -111,7 +113,7 @@ def build_func(source_dir, dest_dir):
 				Depends = 'Resolved'
 			else:
 				State = 'Not Built'
-				Depends = ''
+				Depends = 'Unknown'
 			with con:
 				cur = con.cursor()
 				cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (Name, State, md5, Datetime, Depends))
@@ -135,7 +137,7 @@ def force_rebuild_func(source_dir, dest_dir):
 			Depends = 'Resolved'
 		else:
 			State = 'Not Built'
-			Depends = ''
+			Depends = 'Unknown'
 		with con:
 			cur = con.cursor()
 			cur.execute("UPDATE PACKAGES SET State = ?, Depends = ? WHERE Name = ?", [State, Depends, srcrpm])
@@ -144,20 +146,22 @@ def force_rebuild_func(source_dir, dest_dir):
 
 def check_deps_func(source_dir):
 	if os.path.isfile("packages.db"):
+		# Check source directory for new packages
+		check_func(source_dir)
 		con = lite.connect('packages.db')
-		# For every src.rpm file in source directory
-		for srcrpm in os.listdir(source_dir):
-			args = ['sudo', 'yum-builddep', '-y', source_dir + os.path.sep + srcrpm]
-			# Run install dependencies and save ExitCode
-			ExitCode = subprocess.call(args)
-			if ExitCode == 0:
-				Depends = 'Resolved'
-			else:
-				Depends = 'Unresolved'
-			# Update Depends column
-			with con:
-				cur = con.cursor()
-				cur.execute("UPDATE PACKAGES SET Depends = ? WHERE Name = ?", [Depends, srcrpm])
+		with con:
+			cur = con.cursor()
+			cur.execute("SELECT Name FROM PACKAGES WHERE Depends = 'Unresolved' OR Depends = 'Unknown'")
+			new_deps = cur.fetchall()
+			for dep in new_deps:
+				Name = dep[0]
+				args = ['sudo', 'yum-builddep', '-y', source_dir + os.path.sep + Name]
+				ExitCode = subprocess.call(args)
+				if ExitCode == 0:
+					Depends = 'Resolved'
+				else:
+					Depends = 'Unresolved'
+				cur.execute("UPDATE PACKAGES SET Depends = ? WHERE Name = ?", [Depends, Name])
 	else:
 		print "DB doesn't exist. You need to run 'check' first"
 	return sys.exit()
