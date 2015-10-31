@@ -22,9 +22,8 @@ if os.path.isfile(rpmmacros):
 	else:
 		with open(rpmmacros, "a") as f:
 			f.write("%_make    /usr/bin/make -j " + str(cpu_count))
-			print "Set multicore compile variable"
 else:
-	print "Rpmmacros file not found!"
+	sys.exit("Rpmmacros file not found!")
 
 
 def create_db(source_dir):
