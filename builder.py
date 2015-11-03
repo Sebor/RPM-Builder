@@ -32,7 +32,7 @@ def create_db(source_dir):
 		State = 'Unknown'
 		Depends = 'Unknown'
 		cur = con.cursor()
-		cur.execute("CREATE TABLE PACKAGES(Name TEXT, State INT, MD5 TEXT, DATETIME TEXT, Depends TEXT)")
+		cur.execute("CREATE TABLE PACKAGES(Name TEXT, State TEXT, MD5 TEXT, DATETIME TEXT, Depends TEXT)")
 		for file in os.listdir(source_dir):
 			md5 = hashlib.md5(file).hexdigest()
 			Datetime = datetime.datetime.now()
@@ -47,7 +47,7 @@ def check_func(source_dir):
 		with con:
 			cur = con.cursor()
 			# Create new temp table with all packages in src dir
-			cur.execute("CREATE TABLE NEW_PACKAGES(Name TEXT, MD5 TEXT)")
+			cur.execute("CREATE TABLE NEW_PACKAGES(Name TEXT primary key, MD5 TEXT)")
 			for file in os.listdir(source_dir):
 				md5 = hashlib.md5(file).hexdigest()
 				cur.execute("INSERT INTO NEW_PACKAGES VALUES (?,?);", (file, md5))
@@ -75,8 +75,9 @@ def check_func(source_dir):
 						cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (Name, State, md5, Datetime, Depends))
 					# Pkg name in old main table but with different MD5
 					else:
-						# Undate info about new pkg in in old main
-						cur.execute("UPDATE PACKAGES SET MD5 = ?, State = ?, Depends = ? WHERE Name = ?", [md5, Name, State, Depends])
+						# Update info about new pkg in old main table
+						cur.execute("UPDATE PACKAGES SET MD5 = ?, State = ?, Depends = ? WHERE Name = ?",
+									[md5, Name, State, Depends])
 			else:
 				print "There are no changes in packages. Printing general status..."
 			con.commit()
@@ -88,34 +89,6 @@ def check_func(source_dir):
 		print "DB file doesn't exist. We don't have information about packages. Creating DB..."
 		create_db(source_dir)
 	return new_pkg
-
-
-def build_func(source_dir, dest_dir):
-	# If DB file does not exist
-	if not os.path.isfile("packages.db"):
-		# Build all packages
-		force_rebuild_func(source_dir, dest_dir)
-	else:
-		# Set list of new packages
-		new_pkg = check_func(source_dir)
-		con = lite.connect('packages.db')
-		for newpkg in new_pkg:
-			args = ["rpmbuild", "--define", "_topdir " + dest_dir, "--rebuild", source_dir + os.path.sep + newpkg[0]]
-			ExitCode = subprocess.call(args)
-			md5 = hashlib.md5(newpkg[0]).hexdigest()
-			Datetime = datetime.datetime.now()
-			Name = newpkg[0]
-			if ExitCode == 0:
-				State = 'Built'
-				Depends = 'Resolved'
-			else:
-				State = 'Not Built'
-				Depends = 'Unknown'
-			with con:
-				cur = con.cursor()
-				cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (Name, State, md5, Datetime, Depends))
-				cur.execute("DROP TABLE IF EXISTS NEW_PACKAGES")
-	return sys.exit()
 
 
 def force_rebuild_func(source_dir, dest_dir):
@@ -153,7 +126,37 @@ def force_rebuild_func(source_dir, dest_dir):
 			Depends = 'Unresolved'
 			State = 'Not Built'
 			Datetime = datetime.datetime.now()
-		cur.execute("UPDATE PACKAGES SET State = ?, DATETIME = ?, Depends = ? WHERE Name = ?", [State, Datetime, Depends, Name])
+		cur.execute("UPDATE PACKAGES SET State = ?, DATETIME = ?, Depends = ? WHERE Name = ?", [State, Datetime,
+																								Depends, Name])
+	return sys.exit()
+
+
+def build_func(source_dir, dest_dir):
+	# If DB file does not exist
+	if not os.path.isfile("packages.db"):
+		# Build all packages
+		force_rebuild_func(source_dir, dest_dir)
+	else:
+		# Set list of new packages
+		new_pkg = check_func(source_dir)
+		con = lite.connect('packages.db')
+		for newpkg in new_pkg:
+			Name = newpkg[0]
+			args = ["rpmbuild", "--define", "_topdir " + dest_dir, "--rebuild", source_dir + os.path.sep + Name]
+			ExitCode = subprocess.call(args)
+			md5 = hashlib.md5(Name).hexdigest()
+			Datetime = datetime.datetime.now()
+			if ExitCode == 0:
+				State = 'Built'
+				Depends = 'Resolved'
+			else:
+				State = 'Not Built'
+				Depends = 'Unknown'
+			with con:
+				cur = con.cursor()
+				cur.execute("UPDATE PACKAGES SET State = ?, md5 = ?, Datetime = ?, Depends = ? WHERE Name = ?",
+							[State, md5, Datetime, Depends, Name])
+				cur.execute("DROP TABLE IF EXISTS NEW_PACKAGES")
 	return sys.exit()
 
 
@@ -180,6 +183,32 @@ def check_deps_func(source_dir):
 	return sys.exit()
 
 
+def build_rake_func(source_dir, dest_dir):
+	pass
+	new_pkg = check_func(source_dir)
+	con = lite.connect('packages.db')
+	for pkg in new_pkg:
+		Name = pkg[0]
+		md5 = hashlib.md5(Name).hexdigest()
+		if 'rake' in Name:
+			args = []
+			ExitCode = subprocess.call(args)
+			Datetime = datetime.datetime.now()
+			if ExitCode == 0:
+				Depends = 'Resolved'
+				State = 'Built'
+			else:
+				Depends = 'Unknown'
+				State = 'Not Built'
+			with con:
+				cur = con.cursor()
+				cur.execute("UPDATE PACKAGES SET State = ?, DATETIME = ?, Depends = ? WHERE Name = ?", [State, Datetime,
+							Depends, Name])
+		else:
+			print "There are no packages for rake build"
+			sys.exit()
+
+
 if ACTION == "check":
 	Packages = check_func(SRCPATH)
 	for package in Packages:
@@ -190,5 +219,7 @@ elif ACTION == "force_rebuild":
 	force_rebuild_func(SRCPATH, DESTPATH)
 elif ACTION == "check_deps":
 	check_deps_func(SRCPATH)
+elif ACTION == "build_rake":
+	build_rake_func(SRCPATH, DESTPATH)
 else:
-	print "The action can be 'check', 'build', 'force_rebuild' or 'check_deps'"
+	print "The action can be 'check', 'build', 'force_rebuild', 'check_deps' or 'build_rake'"
