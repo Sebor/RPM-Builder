@@ -76,12 +76,13 @@ def check_func(source_dir):
 					# If pkg name not in main old table
 					if Name not in old_data.keys():
 						# Insert new pkg in old main table
-						cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (Name, State, md5, Datetime, Depends))
+						cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);",
+						(Name, State, md5, Datetime, Depends))
 					# Pkg name in old main table but with different MD5
 					else:
 						# Update info about new pkg in old main table
-						cur.execute("UPDATE PACKAGES SET MD5 = ?, State = ?, Depends = ? WHERE Name = ?",
-									[md5, Name, State, Depends])
+						cur.execute("UPDATE PACKAGES SET MD5 = ?, State = ?, Depends = ?
+						WHERE Name = ?", [md5, Name, State, Depends])
 			else:
 				print "There are no changes in packages. Printing general status..."
 			con.commit()
@@ -153,7 +154,8 @@ def build_func(source_dir, dest_dir):
 			ExitCodeDep = subprocess.call(dargs)
 			if ExitCodeDep == 0:
 				bargs = (["rpmbuild", "--define", "_topdir " + dest_dir,
-						"--define", "dist .el7", "--nocheck", "--rebuild", source_dir + os.path.sep + Name])
+						"--define", "dist .el7", "--nocheck", "--rebuild",
+						source_dir + os.path.sep + Name])
 				ExitCodeBuild = subprocess.call(bargs)
 				Datetime = datetime.datetime.now()
 				if ExitCodeBuild == 0:
@@ -167,8 +169,8 @@ def build_func(source_dir, dest_dir):
 				State = 'Unknown'
 			with con:
 				cur = con.cursor()
-				cur.execute("UPDATE PACKAGES SET State = ?, md5 = ?, Datetime = ?, Depends = ? WHERE Name = ?",
-							[State, md5, Datetime, Depends, Name])
+				cur.execute(("UPDATE PACKAGES SET State = ?, md5 = ?, Datetime = ?, Depends = ? WHERE Name = ?",
+							[State, md5, Datetime, Depends, Name]))
 				con.commit()
 	return sys.exit()
 
@@ -181,7 +183,8 @@ def check_deps_func(source_dir):
 		con = lite.connect('packages.db')
 		with con:
 			cur = con.cursor()
-			cur.execute("SELECT Name FROM PACKAGES WHERE Depends = 'Unresolved' OR Depends = 'Unknown' ORDER BY Name")
+			cur.execute(("SELECT Name FROM PACKAGES 
+			WHERE Depends = 'Unresolved' OR Depends = 'Unknown' ORDER BY Name"))
 			new_deps = cur.fetchall()
 			for dep in new_deps:
 				Name = dep[0]
