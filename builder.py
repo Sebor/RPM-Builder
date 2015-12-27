@@ -76,7 +76,8 @@ def check_func(source_dir):
 					# If pkg name not in main old table
 					if Name not in old_data.keys():
 						# Insert new pkg in old main table
-						cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (Name, State, md5, Datetime, Depends))
+						cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);",
+						(Name, State, md5, Datetime, Depends))
 					# Pkg name in old main table but with different MD5
 					else:
 						# Update info about new pkg in old main table
