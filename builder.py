@@ -76,13 +76,12 @@ def check_func(source_dir):
 					# If pkg name not in main old table
 					if Name not in old_data.keys():
 						# Insert new pkg in old main table
-						cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);",
-						(Name, State, md5, Datetime, Depends))
+						cur.execute("INSERT INTO PACKAGES VALUES (?,?,?,?,?);", (Name, State, md5, Datetime, Depends))
 					# Pkg name in old main table but with different MD5
 					else:
 						# Update info about new pkg in old main table
-						cur.execute("UPDATE PACKAGES SET MD5 = ?, State = ?, Depends = ?
-						WHERE Name = ?", [md5, Name, State, Depends])
+						cur.execute("UPDATE PACKAGES SET MD5 = ?, State = ?, Depends = ? WHERE Name = ?",
+									[md5, Name, State, Depends])
 			else:
 				print "There are no changes in packages. Printing general status..."
 			con.commit()
@@ -114,16 +113,16 @@ def force_rebuild_func(source_dir, dest_dir):
 		all_pkgs = cur.fetchall()
 		for pkg in all_pkgs:
 			Name = pkg[0]
-			dargs = ['sudo', 'yum-builddep', '-y', source_dir + os.path.sep + Name]
+			dargs = ["sudo", "yum-builddep", "-y", "--nogpgcheck", source_dir + os.path.sep + Name]
 			# Exit code for yum-builddep
 			ExitCodeDep = subprocess.call(dargs)
 			if ExitCodeDep == 0:
 				Depends = 'Resolved'
 				Datetime = datetime.datetime.now()
-				rargs = (["rpmbuild", "--define", "_topdir " + dest_dir,
+				bargs = (["rpmbuild", "--define", "_topdir " + dest_dir,
 					  "--define", "dist .el7", "--nocheck", "--rebuild", source_dir + os.path.sep + Name])
 				# Exit code for rpmbuild
-				ExitCodeBuild = subprocess.call(rargs)
+				ExitCodeBuild = subprocess.call(bargs)
 				if ExitCodeBuild == 0:
 					State = 'Built'
 				else:
@@ -150,12 +149,11 @@ def build_func(source_dir, dest_dir):
 		for newpkg in new_pkg:
 			Name = newpkg[0]
 			md5 = hashlib.md5(Name).hexdigest()
-			dargs = (["sudo", "yum-builddep", "-y", source_dir + os.path.sep + Name])
+			dargs = (["sudo", "yum-builddep", "-y", "--nogpgcheck", source_dir + os.path.sep + Name])
 			ExitCodeDep = subprocess.call(dargs)
 			if ExitCodeDep == 0:
 				bargs = (["rpmbuild", "--define", "_topdir " + dest_dir,
-						"--define", "dist .el7", "--nocheck", "--rebuild",
-						source_dir + os.path.sep + Name])
+						"--define", "dist .el7", "--nocheck", "--rebuild", source_dir + os.path.sep + Name])
 				ExitCodeBuild = subprocess.call(bargs)
 				Datetime = datetime.datetime.now()
 				if ExitCodeBuild == 0:
@@ -169,8 +167,8 @@ def build_func(source_dir, dest_dir):
 				State = 'Unknown'
 			with con:
 				cur = con.cursor()
-				cur.execute(("UPDATE PACKAGES SET State = ?, md5 = ?, Datetime = ?, Depends = ? WHERE Name = ?",
-							[State, md5, Datetime, Depends, Name]))
+				cur.execute("UPDATE PACKAGES SET State = ?, md5 = ?, Datetime = ?, Depends = ? WHERE Name = ?",
+							[State, md5, Datetime, Depends, Name])
 				con.commit()
 	return sys.exit()
 
@@ -183,12 +181,11 @@ def check_deps_func(source_dir):
 		con = lite.connect('packages.db')
 		with con:
 			cur = con.cursor()
-			cur.execute(("SELECT Name FROM PACKAGES 
-			WHERE Depends = 'Unresolved' OR Depends = 'Unknown' ORDER BY Name"))
+			cur.execute("SELECT Name FROM PACKAGES WHERE Depends = 'Unresolved' OR Depends = 'Unknown' ORDER BY Name")
 			new_deps = cur.fetchall()
 			for dep in new_deps:
 				Name = dep[0]
-				args = ["sudo", "yum-builddep", "-y", source_dir + os.path.sep + Name]
+				args = ["sudo", "yum-builddep", "-y", "--nogpgcheck", source_dir + os.path.sep + Name]
 				ExitCode = subprocess.call(args)
 				if ExitCode == 0:
 					Depends = 'Resolved'
@@ -228,30 +225,31 @@ def check_list_func(source_dir, dest_dir):
 	# dest_dir - directory for future repository
 	import shutil
 	try:
+		# Open file contained all necessary packages. This file must contain only package names
 		with open("list.txt", "r") as f:
 			pkg_list = f.read().splitlines()
-		# Create a list of files which has been copied
-		with open("copied.txt", "w") as copied:
-			cur_list = []
-			for filename in sorted(os.listdir(source_dir)):
-				wo_ext = filename[:-4]
-				wo_arch = wo_ext.rsplit('.', 1)[0]
-				wo_rel = wo_arch.rsplit('-', 1)[0]
-				wo_ver = wo_rel.rsplit('-', 1)[0]
-				if wo_ver in sorted(pkg_list):
-					# Copy every necessary package to dest_dir
-					pkg_path = source_dir + os.path.sep + filename
-					shutil.copy2(pkg_path, dest_dir)
-					# Add copied pkg name to 'copied.txt'
-					copied.write(wo_ver + "\n")
-					cur_list.append(wo_ver)
-		# Create and write list of missing packages
-		miss_pkg = set(pkg_list) - set(cur_list)
-		with open('missing_pkg.txt') as m:
-			for pkg in sorted(miss_pkg):
-				m.write(pkg + "\n")
 	except:
 		print "File 'list.txt' doesn't exist!"
+		sys.exit()
+	# Create a list of files which has been copied
+	with open("copied_pkg.txt", "w") as copied:
+		cur_list = []
+		for filename in sorted(os.listdir(source_dir)):
+			args = (["rpm", "-q", "--queryformat", "'%{NAME}'", "--package",
+					source_dir + os.path.sep + filename])
+			pkg_name = subprocess.check_output(args)[1:-1]
+			if pkg_name in sorted(pkg_list):
+				# Copy every necessary package to dest_dir
+				pkg_path = source_dir + os.path.sep + filename
+				shutil.copy2(pkg_path, dest_dir)
+				# Add copied pkg name to 'copied_pkg.txt'
+				copied.write(pkg_name + "\n")
+				cur_list.append(pkg_name)
+	# Create and write list of missing packages
+	miss_pkg = set(pkg_list) - set(cur_list)
+	with open("missing_pkg.txt", "w") as m:
+		for pkg in sorted(miss_pkg):
+			m.write(pkg + "\n")
 	return sys.exit()
 
 
